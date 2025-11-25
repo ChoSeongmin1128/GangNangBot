@@ -47,14 +47,27 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
         # 세션에서 redirect_uri 확인
         redirect_uri = request.session.get('oauth_redirect_uri')
         
-        # redirect_uri가 있으면 해당 URI로 리다이렉트 (토큰을 쿼리 파라미터로 전달)
+        # 기본 JSON 응답 데이터 구성
+        response_data = {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": user_id,
+                "email": email,
+                "name": name
+            }
+        }
+        
+        # redirect_uri가 있으면 해당 URI로 리다이렉트
         if redirect_uri:
             # 세션에서 redirect_uri 제거 (한 번만 사용)
             del request.session['oauth_redirect_uri']
             
-            # redirect_uri에 토큰 정보를 쿼리 파라미터로 추가
+            # 프론트엔드가 사용하기 편하도록 개별 파라미터로 전달
+            # token 필드를 기대하는 경우를 위해 token 키도 추가
             params = {
                 'access_token': access_token,
+                'token': access_token,
                 'token_type': 'bearer',
                 'user_id': user_id,
                 'email': email,
@@ -67,16 +80,8 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
             
             return RedirectResponse(url=redirect_url)
         
-        # redirect_uri가 없으면 기본 JSON 응답 반환
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user": {
-                "id": user_id,
-                "email": email,
-                "name": name
-            }
-        }
+        # redirect_uri가 없으면 JSON 응답 반환
+        return response_data
         
     except Exception as e:
         raise HTTPException(
