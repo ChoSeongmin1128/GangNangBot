@@ -28,6 +28,16 @@ async def google_login(request: Request, redirect_uri: str = Query(None)):
     if redirect_uri:
         request.session['oauth_redirect_uri'] = redirect_uri
     
-    # OAuth 콜백 URI는 항상 고정 (Google OAuth 설정에 등록된 URI)
-    oauth_redirect_uri = config.OAUTH_REDIRECT_URI
+    # OAuth 콜백 URI 동적 생성 (현재 요청 도메인 유지)
+    # config.OAUTH_REDIRECT_URI가 있으면 그것을 우선 사용하되, 
+    # 없거나 동적 처리를 원할 경우 request.url_for 사용
+    
+    # 1. 기본적으로 현재 요청의 호스트를 기반으로 콜백 URL 생성
+    oauth_redirect_uri = str(request.url_for('google_callback'))
+    
+    # 2. 프로덕션 환경(Cloud Run)에서 HTTPS 강제 처리
+    # (로드밸런서 뒤에서는 http로 인식될 수 있음)
+    if "localhost" not in oauth_redirect_uri and oauth_redirect_uri.startswith("http://"):
+        oauth_redirect_uri = oauth_redirect_uri.replace("http://", "https://")
+        
     return await oauth.google.authorize_redirect(request, oauth_redirect_uri)

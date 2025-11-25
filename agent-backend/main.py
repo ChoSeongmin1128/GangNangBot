@@ -62,14 +62,15 @@ OAUTH_REDIRECT_URI = config.OAUTH_REDIRECT_URI or ""
 is_https = OAUTH_REDIRECT_URI.startswith("https://")
 
 if IS_PRODUCTION or is_https:
-    # 프로덕션 환경: HTTPS 필수, SameSite=None (크로스 도메인 OAuth 지원)
+    # 프로덕션 환경: SameSite=Lax (Google OAuth GET 리다이렉트 지원)
+    # same_site='none'은 HTTPS 필수이므로 HTTP 리다이렉트 URI를 지원하려면 'lax' 사용
     app.add_middleware(
         SessionMiddleware,
         secret_key=config.JWT_SECRET_KEY or "secret-key",
-        same_site="none",  # 크로스 도메인 쿠키 허용 (Google OAuth 리다이렉트)
-        https_only=True,   # HTTPS에서만 쿠키 전송
+        same_site="lax",   # GET 요청 시 크로스 사이트 쿠키 전송 (OAuth 리다이렉트 지원)
+        https_only=False,  # HTTP 리다이렉트 URI도 지원
     )
-    print("[INFO] Session middleware configured for PRODUCTION (HTTPS, SameSite=None)")
+    print("[INFO] Session middleware configured for PRODUCTION (SameSite=Lax, HTTPS not required)")
 else:
     # 로컬 개발 환경: HTTP 허용, SameSite=Lax
     app.add_middleware(

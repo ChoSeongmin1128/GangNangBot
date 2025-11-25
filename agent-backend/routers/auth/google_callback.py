@@ -4,7 +4,6 @@ GET /auth/google/callback - Google OAuth 콜백 처리
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from urllib.parse import urlencode
 
 from routers.database import get_db
 from utils.jwt import create_access_token
@@ -60,23 +59,32 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
         
         # redirect_uri가 있으면 해당 URI로 리다이렉트
         if redirect_uri:
+            from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+            
             # 세션에서 redirect_uri 제거 (한 번만 사용)
             del request.session['oauth_redirect_uri']
             
-            # 프론트엔드가 사용하기 편하도록 개별 파라미터로 전달
-            # token 필드를 기대하는 경우를 위해 token 키도 추가
-            params = {
-                'access_token': access_token,
-                'token': access_token,
-                'token_type': 'bearer',
-                'user_id': user_id,
-                'email': email,
-                'name': name
-            }
+            # redirect_uri를 파싱하여 기존 쿼리 파라미터 추출
+            parsed = urlparse(redirect_uri)
+            existing_params = parse_qs(parsed.query)
             
-            # redirect_uri에 이미 쿼리 파라미터가 있을 수 있으므로 처리
-            separator = '&' if '?' in redirect_uri else '?'
-            redirect_url = f"{redirect_uri}{separator}{urlencode(params)}"
+            # 기존 파라미터를 단일 값으로 변환 (parse_qs는 리스트로 반환)
+            params = {k: v[0] if isinstance(v, list) and len(v) == 1 else v 
+                     for k, v in existing_params.items()}
+            
+            # token 파라미터 추가 (기존 파라미터 뒤에)
+            params['token'] = access_token
+            
+            # URL 재구성
+            new_query = urlencode(params)
+            redirect_url = urlunparse((
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                new_query,
+                parsed.fragment
+            ))
             
             return RedirectResponse(url=redirect_url)
         
