@@ -54,7 +54,32 @@ app.add_middleware(
 )
 
 # 세션 미들웨어 (OAuth State 관리용)
-app.add_middleware(SessionMiddleware, secret_key=config.JWT_SECRET_KEY or "secret-key")
+# 환경에 따라 자동으로 설정 조정
+IS_PRODUCTION = os.getenv("K_SERVICE") is not None  # Cloud Run 환경 감지
+OAUTH_REDIRECT_URI = config.OAUTH_REDIRECT_URI or ""
+
+# 프로덕션 환경 판단: Cloud Run이거나 HTTPS를 사용하는 경우
+is_https = OAUTH_REDIRECT_URI.startswith("https://")
+
+if IS_PRODUCTION or is_https:
+    # 프로덕션 환경: SameSite=Lax (Google OAuth GET 리다이렉트 지원)
+    # same_site='none'은 HTTPS 필수이므로 HTTP 리다이렉트 URI를 지원하려면 'lax' 사용
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=config.JWT_SECRET_KEY or "secret-key",
+        same_site="lax",   # GET 요청 시 크로스 사이트 쿠키 전송 (OAuth 리다이렉트 지원)
+        https_only=False,  # HTTP 리다이렉트 URI도 지원
+    )
+    print("[INFO] Session middleware configured for PRODUCTION (SameSite=Lax, HTTPS not required)")
+else:
+    # 로컬 개발 환경: HTTP 허용, SameSite=Lax
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=config.JWT_SECRET_KEY or "secret-key",
+        same_site="lax",   # 일반적인 크로스 사이트 요청에서 쿠키 전송
+        https_only=False,  # HTTP에서도 쿠키 전송
+    )
+    print("[INFO] Session middleware configured for DEVELOPMENT (HTTP, SameSite=Lax)")
 
 # 라우터 등록 (새로운 구조)
 app.include_router(sessions_router)

@@ -65,5 +65,3 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
         return RedirectResponse(
             url=f"{frontend_url}/login?error={error_message}"
         )
-
-
