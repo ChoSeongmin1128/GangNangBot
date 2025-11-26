@@ -4,6 +4,7 @@ GET /auth/google/callback - Google OAuth 콜백 처리
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from urllib.parse import urlencode
 
 from routers.database import get_db
 from utils.jwt import create_access_token
@@ -33,7 +34,8 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
         
         google_id = user_info.get('sub')
         email = user_info.get('email')
-        name = user_info.get('name', email.split('@')[0])
+        # name이 없으면 email에서 추출, email도 없으면 기본값
+        name = user_info.get('name') or (email.split('@')[0] if email else 'User')
         
         # DB에 사용자 정보 저장/업데이트
         user_id = await upsert_user(db, google_id, email, name)
@@ -50,12 +52,21 @@ async def google_callback(request: Request, db: AsyncSession = Depends(get_db)):
         # 세션에서 redirect_uri 제거 (일회성)
         request.session.pop('frontend_redirect_uri', None)
         
-        # URL에 이미 쿼리 파라미터가 있는지 확인
+        # URL 파라미터 생성 (특수문자 인코딩)
+        
+        # 기존 쿼리 파라미터 확인
         separator = '&' if '?' in frontend_redirect else '?'
         
-        # 프론트엔드로 리다이렉트 (token을 URL 파라미터로 전달)
+        # 파라미터 생성 (URL 인코딩 자동 처리)
+        params = urlencode({
+            'token': access_token,
+            'email': email or '',
+            'name': name
+        })
+        
+        # 프론트엔드로 리다이렉트
         return RedirectResponse(
-            url=f"{frontend_redirect}{separator}token={access_token}&email={email}&name={name}"
+            url=f"{frontend_redirect}{separator}{params}"
         )
         
     except Exception as e:

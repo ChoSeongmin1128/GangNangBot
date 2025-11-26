@@ -44,10 +44,26 @@ app = FastAPI(
     }
 )
 
+# 환경 감지
+IS_PRODUCTION = os.getenv("K_SERVICE") is not None  # Cloud Run 환경 감지
+
 # CORS 설정 (프론트엔드 연동용)
+allowed_origins = [
+    "https://gangnangbot.vercel.app",  # 프로덕션 프론트엔드
+]
+
+# 로컬 개발 환경에서는 localhost 추가
+if not IS_PRODUCTION:
+    allowed_origins.extend([
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8080",
+    ])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 프로덕션에서는 특정 도메인으로 제한
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,22 +71,20 @@ app.add_middleware(
 
 # 세션 미들웨어 (OAuth State 관리용)
 # 환경에 따라 자동으로 설정 조정
-IS_PRODUCTION = os.getenv("K_SERVICE") is not None  # Cloud Run 환경 감지
 OAUTH_REDIRECT_URI = config.OAUTH_REDIRECT_URI or ""
 
 # 프로덕션 환경 판단: Cloud Run이거나 HTTPS를 사용하는 경우
 is_https = OAUTH_REDIRECT_URI.startswith("https://")
 
 if IS_PRODUCTION or is_https:
-    # 프로덕션 환경: SameSite=Lax (Google OAuth GET 리다이렉트 지원)
-    # same_site='none'은 HTTPS 필수이므로 HTTP 리다이렉트 URI를 지원하려면 'lax' 사용
+    # 프로덕션 환경: HTTPS 전용, SameSite=Lax
     app.add_middleware(
         SessionMiddleware,
         secret_key=config.JWT_SECRET_KEY or "secret-key",
         same_site="lax",   # GET 요청 시 크로스 사이트 쿠키 전송 (OAuth 리다이렉트 지원)
-        https_only=False,  # HTTP 리다이렉트 URI도 지원
+        https_only=True,   # ✅ HTTPS에서만 쿠키 전송 (보안 강화)
     )
-    print("[INFO] Session middleware configured for PRODUCTION (SameSite=Lax, HTTPS not required)")
+    print("[INFO] Session middleware configured for PRODUCTION (SameSite=Lax, HTTPS required)")
 else:
     # 로컬 개발 환경: HTTP 허용, SameSite=Lax
     app.add_middleware(
